@@ -2,6 +2,39 @@ import { createClient, type Client, type InArgs, type InStatement, type ResultSe
 
 type BoundValue = string | number | bigint | null | ArrayBuffer | ArrayBufferView;
 type Statement = { sql: string; args: BoundValue[] };
+type PendingRead = { statement: Statement; resolve: (result: ResultSet) => void; reject: (error: unknown) => void };
+const pendingReads = new WeakMap<Client, PendingRead[]>();
+const scheduledReads = new WeakSet<Client>();
+
+function enqueueRead(client: Client, statement: Statement): Promise<ResultSet> {
+  return new Promise((resolve, reject) => {
+    const pending = pendingReads.get(client) ?? [];
+    pending.push({ statement, resolve, reject });
+    pendingReads.set(client, pending);
+    if (!scheduledReads.has(client)) {
+      scheduledReads.add(client);
+      queueMicrotask(() => { void flushReads(client); });
+    }
+  });
+}
+
+async function flushReads(client: Client) {
+  scheduledReads.delete(client);
+  const pending = pendingReads.get(client)?.splice(0) ?? [];
+  if (!pending.length) return;
+  try {
+    const results = pending.length === 1
+      ? [await client.execute({ sql: pending[0].statement.sql, args: pending[0].statement.args as InArgs })]
+      : await client.batch(pending.map(item => ({ sql: item.statement.sql, args: item.statement.args as InArgs })), 'read');
+    pending.forEach((item, index) => item.resolve(results[index]));
+  } catch (error) {
+    pending.forEach(item => item.reject(error));
+  }
+  if (pendingReads.get(client)?.length && !scheduledReads.has(client)) {
+    scheduledReads.add(client);
+    queueMicrotask(() => { void flushReads(client); });
+  }
+}
 
 class PreparedStatement {
   private readonly client: Client;
@@ -17,12 +50,12 @@ class PreparedStatement {
   }
 
   async all<T = Record<string, unknown>>() {
-    const result = await this.client.execute({ sql: this.statement.sql, args: this.statement.args as InArgs });
+    const result = await enqueueRead(this.client, this.statement);
     return toD1Result<T>(result);
   }
 
   async first<T = Record<string, unknown>>(columnName?: string): Promise<T | null> {
-    const result = await this.client.execute({ sql: this.statement.sql, args: this.statement.args as InArgs });
+    const result = await enqueueRead(this.client, this.statement);
     const row = result.rows[0] as Record<string, unknown> | undefined;
     if (!row) return null;
     return (columnName ? row[columnName] ?? null : row) as T | null;

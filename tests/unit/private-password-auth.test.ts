@@ -4,22 +4,27 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
+import {PRIVATE_ACCOUNT_SEED} from '../../src/server/private-account-seed.ts';
 const require=createRequire(import.meta.url);
 
 function fixture(){
+ const seedSource=readFileSync(new URL('../../src/server/private-account-seed.ts',import.meta.url),'utf8');
+ const seedJs=ts.transpileModule(seedSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ const seedModule={exports:{} as Record<string,any>};new Function('require','module','exports',seedJs)(require,seedModule,seedModule.exports);
  const source=readFileSync(new URL('../../src/server/private-auth.ts',import.meta.url),'utf8');
  const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- const jar=new Map<string,string>(),mockRequire=(name:string)=>name==='next/headers'?{cookies:async()=>({get:(key:string)=>jar.has(key)?{value:jar.get(key)}:undefined,set:(key:string,value:string)=>jar.set(key,value)})}:name==='next/navigation'?{redirect:(path:string)=>{throw Error('redirect:'+path)}}:name==='@/src/server/platform'?{env:{}}:name==='./access'?{ServiceError:class ServiceError extends Error{status:number;code:string;constructor(message:string,status=400,code='invalid_input'){super(message);this.status=status;this.code=code;}}}:require(name);
+ const jar=new Map<string,string>(),mockRequire=(name:string)=>name==='next/headers'?{cookies:async()=>({get:(key:string)=>jar.has(key)?{value:jar.get(key)}:undefined,set:(key:string,value:string)=>jar.set(key,value)})}:name==='next/navigation'?{redirect:(path:string)=>{throw Error('redirect:'+path)}}:name==='@/src/server/platform'?{env:{}}:name==='./access'?{ServiceError:class ServiceError extends Error{status:number;code:string;constructor(message:string,status=400,code='invalid_input'){super(message);this.status=status;this.code=code;}}}:name==='./private-account-seed'?seedModule.exports:require(name);
  const module={exports:{} as Record<string,any>};new Function('require','module','exports',js)(mockRequire,module,module.exports);
- const sql=new DatabaseSync(':memory:'),db={prepare(query:string){let args:unknown[]=[];return {bind(...values:unknown[]){args=values;return this;},async first(){return sql.prepare(query).get(...args as never[])??null;},async all(){return {results:sql.prepare(query).all(...args as never[])};},async run(){const result=sql.prepare(query).run(...args as never[]);return {meta:{changes:Number(result.changes)}};}};},async exec(query:string){sql.exec(query);},async batch(statements:{run:()=>Promise<unknown>}[]){const out=[];for(const statement of statements)out.push(await statement.run());return out;}} as unknown as D1Database;
+ const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE recruiters(id TEXT PRIMARY KEY,user_id TEXT UNIQUE,email TEXT UNIQUE NOT NULL,role TEXT NOT NULL,active INTEGER NOT NULL,data_json TEXT NOT NULL);');
+ const db={prepare(query:string){let args:unknown[]=[];return {bind(...values:unknown[]){args=values;return this;},async first(){return sql.prepare(query).get(...args as never[])??null;},async all(){return {results:sql.prepare(query).all(...args as never[])};},async run(){const result=sql.prepare(query).run(...args as never[]);return {meta:{changes:Number(result.changes)}};}};},async exec(query:string){sql.exec(query);},async batch(statements:{run:()=>Promise<unknown>}[]){const out=[];for(const statement of statements)out.push(await statement.run());return out;}} as unknown as D1Database;
  return {auth:module.exports,db,sql,jar};
 }
 const settings={HQ_WEBHOOK_URL:'https://example.test/macros/s/private/exec',HQ_WEBHOOK_SECRET:'private-test-secret'};
 
-test('three approved test accounts use their assigned initial passwords and must change them on first login',async()=>{
+test('all private roster accounts use first.last2026 temporary passwords and must change them on first login',async()=>{
  const {auth,db,jar}=fixture();
- for(const [email,password] of [['cvetanovicaleksa45@gmail.com','aleksa.cvetanovic2026'],['lakikiller09@gmail.com','lazar.jevtic2026'],['mikicn956@gmail.com','nate.mitchell2026']]){
-  const session=await auth.signIn(db,email,password);assert.equal(session.email,email);assert.equal(session.mustChangePassword,true);assert.ok(jar.has('tti_private_session'));
+ for(const account of PRIVATE_ACCOUNT_SEED){
+  const session=await auth.signIn(db,account.email,`${account.passwordStem}2026`);assert.equal(session.email,account.email);assert.equal(session.mustChangePassword,true);assert.ok(jar.has('tti_private_session'));
  }
  await assert.rejects(auth.signIn(db,'unapproved@example.com','someone2026'),/incorrect/i);
 });
