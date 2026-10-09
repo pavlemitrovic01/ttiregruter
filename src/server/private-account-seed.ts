@@ -31,7 +31,7 @@ export const PRIVATE_ACCOUNT_SEED: PrivateAccountSeed[] = [
   { id: 'approved-34de3893-639a-4ade-a7ec-a2433bfaf200', userId: 'private-uros-mladenovic', email: 'urosmladenovice25@gmail.com', role: 'recruiter', fullName: 'Uros Mladenovic', alias: 'Matt Milano', passwordStem: 'uros.mladenovic', referralUrl: 'https://apply.ttirecruiting.us/?ref=matt-milano' },
   { id: 'approved-5938b753-c498-4c8d-a52d-2f9c1b25e556', userId: 'private-marta', email: 'martatodorovic8@gmail.com', role: 'recruiter', fullName: 'Marta Todorovic', alias: 'Martha Smith', passwordStem: 'marta.todorovic', referralUrl: 'https://apply.ttirecruiting.us/?ref=martha-smith' },
   { id: 'approved-b7be1a76-02e2-468c-a979-46379f6a3d81', userId: 'private-mathew', email: 'cukce02@gmail.com', role: 'recruiter', fullName: 'Mathew Malone', alias: 'Mathew Malone', passwordStem: 'mathew.malone', referralUrl: 'https://apply.ttirecruiting.us/?ref=mathew-malone' },
-  { id: 'bootstrap-tti-owner', userId: 'private-tti-owner', email: 'tticdlrecruiting@gmail.com', role: 'admin', fullName: 'TTI Recruiting', alias: 'TTI Recruiting', passwordStem: 'tti.recruiting', referralUrl: null },
+  { id: 'bootstrap-tti-owner', userId: 'private-tti-owner', email: 'tticdlrecruiting@gmail.com', role: 'owner', fullName: 'TTI Recruiting', alias: 'TTI Recruiting', passwordStem: 'tti.recruiting', referralUrl: null },
 ];
 
 export const privateInitialPassword = (stem: string) => `${stem}2026`;
